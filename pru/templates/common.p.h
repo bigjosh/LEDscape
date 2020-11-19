@@ -70,6 +70,7 @@
 #define ARM_PRU1_INTERRUPT      22
 
 #define CONST_PRUDRAM   C24
+
 #define CONST_SHAREDRAM C28
 #define CONST_L3RAM     C30
 #define CONST_DDR       C31
@@ -189,11 +190,11 @@
  * with things that must happen on a tight schedule.
  */
 .macro SLEEPNS
-.mparam ns,inst,lab
-	MOV r_sleep_counter, (ns/10)-1-inst // ws2811 -- high speed
-lab:
+.mparam ns
+	MOV r_sleep_counter, (ns/5)-1
+continue_sleep:
 	SUB r_sleep_counter, r_sleep_counter, 1
-	QBNE lab, r_sleep_counter, 0
+	QBNE continue_sleep, r_sleep_counter, 0
 .endm
 
 
@@ -206,10 +207,10 @@ lab:
 	// this value was found through trial and error on the DMX signal
 	// generation
 	MOV r_temp2, (ns)/5 - 20
-lab:
+continue_wait:
 	LBBO r_temp1, r_temp_addr, 0xC, 4 // read the cycle counter
 //	SUB r9, r9, r_sleep_counter
-	QBGT lab, r_temp1, r_temp2
+	QBGT continue_wait, r_temp1, r_temp2
 .endm
 
 /** Used after WAITNS to jump to a label if too much time has elapsed */
@@ -246,6 +247,39 @@ lab:
 	#else
 		MOV R31.b0, PRU_ARM_INTERRUPT
 	#endif
+.endm
+
+
+/* Send an interrupt to the ARM*/
+.macro PRU_INIT
+    // Enable OCP master port
+    // clear the STANDBY_INIT bit in the SYSCFG register,
+    // otherwise the PRU will not be able to write outside the
+    // PRU memory space and to the BeagleBon's pins.
+    LBCO	r0, C4, 4, 4
+    CLR		r0, r0, 4
+    SBCO	r0, C4, 4, 4
+
+    // Configure the programmable pointer register for PRU0 by setting
+    // c28_pointer[15:0] field to 0x0120.  This will make C28 point to
+    // 0x00012000 (PRU shared RAM).
+    MOV		r0, 0x00000120
+    MOV		r1, CTPPR_0
+    ST32	r0, r1
+
+    // Configure the programmable pointer register for PRU0 by setting
+    // c31_pointer[15:0] field to 0x0010.  This will make C31 point to
+    // 0x80001000 (DDR memory).
+    MOV		r0, 0x00100000
+    MOV		r1, CTPPR_1
+    ST32	r0, r1
+
+    // Write a 0x1 into the response field so that they know we have started
+    MOV r2, #0x1
+    SBCO r2, CONST_PRUDRAM, 12, 4
+
+
+    MOV r20, 0xFFFFFFFF
 .endm
 
 // ***************************************
@@ -343,6 +377,26 @@ lab:
  * @param channelCount The number of channels to load data for. Must be <= 16
  */
 #define LOAD_CHANNEL_DATA(channelsPerPru, firstChannel,channelCount) LBBO r_data0, r_data_addr, PRU_NUM*channelsPerPru*4+firstChannel*4, channelCount*4
+#define LOAD_CHANNEL_DATA_FROM_PRU_RAM(channelsPerPru, firstChannel,channelCount) LBCO r_data0, CONST_PRUDRAM, 16+firstChannel*4, channelCount*4
+#define CHANNEL_DATA_TO_PRU_RAM(channelsPerPru, firstChannel, channelCount) SBCO r_data0, CONST_PRUDRAM, 16+firstChannel*4, channelCount*4
+
+#define DEBUG_CONST_DATA(value) \
+    MOV r_data0, value; \
+    MOV r_data1, value; \
+    MOV r_data2, value; \
+    MOV r_data3, value; \
+    MOV r_data4, value; \
+    MOV r_data5, value; \
+    MOV r_data6, value; \
+    MOV r_data7, value; \
+    MOV r_data8, value; \
+    MOV r_data9, value; \
+    MOV r_data10, value; \
+    MOV r_data11, value; \
+    MOV r_data12, value; \
+    MOV r_data13, value; \
+    MOV r_data14, value; \
+    MOV r_data15, value;
 
 // ***************************************
 // *    Global Structure Definitions     *

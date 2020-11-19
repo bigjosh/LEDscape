@@ -268,7 +268,7 @@ l_word_loop:
 	GPIO_APPLY_MASK_TO_ADDR()
 
 	// HIGH for about 2ms
-	SLEEPNS 2504800, 4, wait_end_high
+	SLEEPNS 2504800
 
 	// Write out that we are done!
 	// Store a non-zero response in the buffer so that they know that we are done

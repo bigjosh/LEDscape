@@ -33,35 +33,7 @@
 #define CHECK_TIMEOUT WAIT_TIMEOUT 3000, FRAME_DONE
 
 START:
-	// Enable OCP master port
-	// clear the STANDBY_INIT bit in the SYSCFG register,
-	// otherwise the PRU will not be able to write outside the
-	// PRU memory space and to the BeagleBon's pins.
-	LBCO	r0, C4, 4, 4
-	CLR		r0, r0, 4
-	SBCO	r0, C4, 4, 4
-
-	// Configure the programmable pointer register for PRU0 by setting
-	// c28_pointer[15:0] field to 0x0120.  This will make C28 point to
-	// 0x00012000 (PRU shared RAM).
-	MOV		r0, 0x00000120
-	MOV		r1, CTPPR_0
-	ST32	r0, r1
-
-	// Configure the programmable pointer register for PRU0 by setting
-	// c31_pointer[15:0] field to 0x0010.  This will make C31 point to
-	// 0x80001000 (DDR memory).
-	MOV		r0, 0x00100000
-	MOV		r1, CTPPR_1
-	ST32	r0, r1
-
-	// Write a 0x1 into the response field so that they know we have started
-	MOV r2, #0x1
-	SBCO r2, CONST_PRUDRAM, 12, 4
-
-
-	MOV r20, 0xFFFFFFFF
-
+	PRU_INIT
 	// Wait for the start condition from the main program to indicate
 	// that we have a rendered frame ready to clock out.  This also
 	// handles the exit case if an invalid value is written to the start
@@ -70,17 +42,15 @@ _LOOP:
 	// Let ledscape know that we're starting the loop again. It waits for this
 	// interrupt before sending another frame
 	RAISE_ARM_INTERRUPT
+	SLEEPNS 1000
 
 	// Load the pointer to the buffer from PRU DRAM into r0 and the
 	// length (in bytes-bit words) into r1.
 	// start command into r2
-	LBCO      r_data_addr, CONST_PRUDRAM, 0, 12
+	LBCO r_data_addr, CONST_PRUDRAM, 0, 12
 
 	// Wait for a non-zero command
 	QBEQ _LOOP, r2, #0
-
-	// Reset the sleep timer
-	RESET_COUNTER
 
 	// Zero out the start command so that they know we have received it
 	// This allows maximum speed frame drawing since they know that they
@@ -91,15 +61,44 @@ _LOOP:
 	// Command of 0xFF is the signal to exit
 	QBEQ EXIT, r2, #0xFF
 
+SEND_DATA:
+	// Load the starting data address
+	LBCO r_data_addr, CONST_PRUDRAM, 0, 4
+	SLEEPNS 5000
+
+	// Reset the sleep timer
+	RESET_COUNTER
+
 l_word_loop:
 	// for bit in 24 to 0
 	MOV r_bit_num, 24
 
+	PREP_GPIO_MASK_NAMED(all)
+
+	////////
+	// Clear lines from last bit
+	PREP_GPIO_ADDRS_FOR_CLEAR()
+
+	WAITNS 900, wait_one_time
+	GPIO_APPLY_MASK_TO_ADDR()
+
+	PREP_GPIO_ADDRS_FOR_SET()
+	////////
+
+	// Load this word of data into PRU DRAM
+	LOAD_CHANNEL_DATA(24, 0, 16)
+	CHANNEL_DATA_TO_PRU_RAM(24, 0, 16)
+
+	LOAD_CHANNEL_DATA(24, 16, 8)
+	CHANNEL_DATA_TO_PRU_RAM(24, 16, 8)
+
+
 	l_bit_loop:
 		DECREMENT r_bit_num
 
+		#if PRU_NUM == 0
 		// Load 16 registers of data, starting at r10
-		LOAD_CHANNEL_DATA(24, 0, 16)
+		LOAD_CHANNEL_DATA_FROM_PRU_RAM(24, 0, 16)
 
 		// Zero out the registers
 		RESET_GPIO_ZEROS()
@@ -124,7 +123,7 @@ l_word_loop:
 		TEST_BIT_ZERO(r_data15, 15)
 
 		// Load 8 more registers of data
-		LOAD_CHANNEL_DATA(24, 16, 8)
+		LOAD_CHANNEL_DATA_FROM_PRU_RAM(24, 16, 8)
 		// Data loaded
 
 		// Load the address(es) of the GPIO devices
@@ -134,10 +133,10 @@ l_word_loop:
 		PREP_GPIO_ADDRS_FOR_CLEAR()
 
 		WAITNS 900, wait_one_time
-		CHECK_TIMEOUT
 		GPIO_APPLY_MASK_TO_ADDR()
 
 		PREP_GPIO_ADDRS_FOR_SET()
+
 
 		// Wait until the end of the frame (including the time it takes to reset the counter)
 		WAITNS 1150, wait_frame_spacing_time
@@ -161,11 +160,78 @@ l_word_loop:
 		TEST_BIT_ZERO(r_data7, 23)
 
 		WAITNS 240, wait_zero_time
-		CHECK_TIMEOUT
 
 		// Lower the zero bit lines
 		GPIO_APPLY_ZEROS_TO_ADDR()
 
+		#else
+		// Load 16 registers of data, starting at r10
+		LOAD_CHANNEL_DATA_FROM_PRU_RAM(24, 0, 16)
+
+		// Zero out the registers
+		RESET_GPIO_ZEROS()
+
+		TEST_BIT_ZERO(r_data0,  0)
+		TEST_BIT_ZERO(r_data1,  1)
+		TEST_BIT_ZERO(r_data2,  2)
+		TEST_BIT_ZERO(r_data3,  3)
+		TEST_BIT_ZERO(r_data4,  4)
+		TEST_BIT_ZERO(r_data5,  5)
+		TEST_BIT_ZERO(r_data6,  6)
+		TEST_BIT_ZERO(r_data7,  7)
+
+		TEST_BIT_ZERO(r_data8,  8)
+		TEST_BIT_ZERO(r_data9,  9)
+		TEST_BIT_ZERO(r_data10, 10)
+		TEST_BIT_ZERO(r_data11, 11)
+		TEST_BIT_ZERO(r_data12, 12)
+		TEST_BIT_ZERO(r_data13, 13)
+
+		TEST_BIT_ZERO(r_data14, 14)
+		TEST_BIT_ZERO(r_data15, 15)
+
+		// Load 8 more registers of data
+		LOAD_CHANNEL_DATA_FROM_PRU_RAM(24, 16, 8)
+		// Data loaded
+
+		// Load the address(es) of the GPIO devices
+		PREP_GPIO_MASK_NAMED(all)
+
+		// Clear lines from last bit
+		PREP_GPIO_ADDRS_FOR_CLEAR()
+
+		WAITNS 900, wait_one_time
+		GPIO_APPLY_MASK_TO_ADDR()
+
+		PREP_GPIO_ADDRS_FOR_SET()
+
+
+		// Wait until the end of the frame (including the time it takes to reset the counter)
+		WAITNS 1150, wait_frame_spacing_time
+		CHECK_TIMEOUT
+		RESET_COUNTER
+
+		// Send all the start bits
+		GPIO_APPLY_MASK_TO_ADDR()
+
+		// Prepare to lower the zero bit lines
+		PREP_GPIO_ADDRS_FOR_CLEAR()
+
+		// Test some more bits to pass the time
+		TEST_BIT_ZERO(r_data0, 16)
+		TEST_BIT_ZERO(r_data1, 17)
+		TEST_BIT_ZERO(r_data2, 18)
+		TEST_BIT_ZERO(r_data3, 19)
+		TEST_BIT_ZERO(r_data4, 20)
+		TEST_BIT_ZERO(r_data5, 21)
+		TEST_BIT_ZERO(r_data6, 22)
+		TEST_BIT_ZERO(r_data7, 23)
+
+		WAITNS 240, wait_zero_time
+
+		// Lower the zero bit lines
+		GPIO_APPLY_ZEROS_TO_ADDR()
+		#endif
 		// The one bits are lowered in the next iteration of the loop
 		QBNE l_bit_loop, r_bit_num, 0
 
@@ -185,7 +251,8 @@ FRAME_DONE:
 
 	// Delay at least 50 usec; this is the required reset
 	// time for the LED strip to update with the new pixels.
-	SLEEPNS 50000, 1, reset_time
+	//SLEEPNS 50000
+	SLEEPNS 1000000
 
 	// Write out that we are done!
 	// Store a non-zero response in the buffer so that they know that we are done

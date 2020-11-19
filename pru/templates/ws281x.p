@@ -69,6 +69,15 @@ SEND_DATA:
 	// Reset the sleep timer
 	RESET_COUNTER
 
+
+	// Load this word of data into PRU DRAM
+	LOAD_CHANNEL_DATA(24, 0, 16)
+	CHANNEL_DATA_TO_PRU_RAM(24, 0, 16)
+
+	LOAD_CHANNEL_DATA(24, 16, 8)
+	CHANNEL_DATA_TO_PRU_RAM(24, 16, 8)
+
+
 l_word_loop:
 	// for bit in 24 to 0
 	MOV r_bit_num, 24
@@ -84,13 +93,6 @@ l_word_loop:
 
 	PREP_GPIO_ADDRS_FOR_SET()
 	////////
-
-	// Load this word of data into PRU DRAM
-	LOAD_CHANNEL_DATA(24, 0, 16)
-	CHANNEL_DATA_TO_PRU_RAM(24, 0, 16)
-
-	LOAD_CHANNEL_DATA(24, 16, 8)
-	CHANNEL_DATA_TO_PRU_RAM(24, 16, 8)
 
 
 	l_bit_loop:

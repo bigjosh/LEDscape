@@ -163,6 +163,10 @@ l_word_loop:
 		WAITNS 240, wait_zero_time
 		CHECK_TIMEOUT
 
+		#warning Set all bits on GPIO to 0's so we can check for streched bits on oscilisope
+		// If we see any wider than 500ns then these would have been glitched to 1's
+		MOV r_gpio0_zeros, GPIO_MASK(0,all)
+
 		// Lower the zero bit lines
 		GPIO_APPLY_ZEROS_TO_ADDR()
 

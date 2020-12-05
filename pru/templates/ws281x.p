@@ -91,6 +91,15 @@ _LOOP:
 	// Command of 0xFF is the signal to exit
 	QBEQ EXIT, r2, #0xFF
 
+
+	// Check to make sure we are PRU0
+	// If we are not, then do not write anything to the GPIO regs since we
+	// would be competeing with PRU0 which is doing the exact same thing as us at almost the
+	// exact same as us. 
+
+	MOV r1, PRU_NUM
+	QBNE SKIP_FRAME , r1 , 0
+	
 l_word_loop:
 	// for bit in 24 to 0
 	MOV r_bit_num, 24
@@ -190,6 +199,8 @@ FRAME_DONE:
 	// Delay at least 50 usec; this is the required reset
 	// time for the LED strip to update with the new pixels.
 	SLEEPNS 3000000, 1, reset_time
+
+SKIP_FRAME:
 
 	// Write out that we are done!
 	// Store a non-zero response in the buffer so that they know that we are done
